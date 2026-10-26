@@ -1,0 +1,65 @@
+
+name: WAHYU Minecraft Server Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "server.properties"
+      - ".github/workflows/server.yml"
+
+jobs:
+  test-server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Download Paper
+        run: |
+          VERSION="1.21.8"
+          API="https://api.papermc.io/v2/projects/paper/versions/$VERSION"
+
+          BUILD=$(curl -fsSL "$API" | jq -r '.builds[-1]')
+          URL="$API/builds/$BUILD/downloads/paper-$VERSION-$BUILD.jar"
+
+          curl -fL "$URL" -o paper.jar
+          java -version
+          ls -lh paper.jar
+
+      - name: Prepare server
+        run: |
+          cp server.properties server.properties.bak
+          echo "eula=true" > eula.txt
+
+      - name: Start and test server
+        run: |
+          java -Xms512M -Xmx2G -jar paper.jar --nogui > server.log 2>&1 &
+          PID=$!
+
+          for i in $(seq 1 90); do
+            if grep -q "Done (" server.log; then
+              echo "Server berhasil dimulai!"
+              cat server.log
+              kill "$PID" || true
+              exit 0
+            fi
+
+            if ! kill -0 "$PID" 2>/dev/null; then
+              cat server.log
+              exit 1
+            fi
+
+            sleep 2
+          done
+
+          cat server.log
+          kill "$PID" || true
+          echo "Server belum selesai dimulai dalam batas waktu."
+          exit 1
+          
